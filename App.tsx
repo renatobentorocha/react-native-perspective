@@ -227,21 +227,27 @@ const CustomSquare = ({rotateX, style, width, height}: CustomSquareProps) => {
   const animatedStyle = useAnimatedStyle(() => {
     const m = createIdentityMatrix();
 
-    const x = CANVAS_CENTER.x - width / 2;
+    const x = CANVAS_CENTER.x - 150;
     const y = CANVAS_CENTER.y - height / 2;
 
-    reuseTranslate2dCommand(m, x, y);
-    console.log(createOrthographic(x, x + 100, y - 100, 0, 0, 100));
+    const orthographic = createOrthographic(x, x + 1.2, x, x + 1.2, 1, 2);
+
+    const result = Array.from({length: m.length}, () => 0);
+
+    multiplyInto(result, orthographic, m);
+
+    // reuseTranslate2dCommand(result, x, y);
+    // reuseRotateYCommand(result, Math.PI / 3);
 
     // reuseRotateXCommand(m, rotateX.value);
-    // reuseRotateYCommand(m, rotate.value);
+    reuseTranslate2dCommand(result, x, y);
+    reuseRotateYCommand(result, Math.PI / 4);
     // reuseRotateZCommand(m, rotate.value);
 
     // matrix.value = m;
-    // reuseTranslate2dCommand(m, CANVAS_CENTER.x, CANVAS_CENTER.y);
 
     return {
-      transform: [{perspective: 1000}, {matrix: m}],
+      transform: [{perspective: 1000}, {matrix: result}],
     };
   });
 
@@ -252,31 +258,29 @@ const RightSquare = ({rotateX, style, width, height}: CustomSquareProps) => {
   const animatedStyle = useAnimatedStyle(() => {
     const m = createIdentityMatrix();
 
-    // reuseTranslate2dCommand(m, CANVAS_CENTER.x, CANVAS_CENTER.y - height / 2);
-    reuseTranslate3dCommand(
-      m,
-      0,
-      CANVAS_CENTER.y - height / 2,
-      CANVAS_CENTER.x,
-    );
-    reuseRotateYCommand(m, Math.PI);
+    const x = CANVAS_CENTER.x;
+    const y = CANVAS_CENTER.y - height / 2;
 
-    // reuseTranslate2dCommand(
-    //   m,
-    //   CANVAS_CENTER.x - width / 2,
-    //   CANVAS_CENTER.y - height / 2,
-    // );
+    const orthographic = createOrthographic(x, x + 1.1, x, x + 1.1, 1, 2);
 
-    reuseRotateXCommand(m, rotateX.value);
+    const result = Array.from({length: m.length}, () => 0);
+
+    multiplyInto(result, orthographic, m);
+
+    reuseTranslate2dCommand(result, x, y);
+    reuseRotateYCommand(result, Math.PI / 4);
+
+    // reuseRotateYCommand(result, Math.PI / 3);
+
+    // reuseRotateXCommand(m, rotateX.value);
     // reuseRotateYCommand(m, rotate.value);
     // reuseRotateZCommand(m, rotate.value);
 
-    console.log(m);
     // matrix.value = m;
     // reuseTranslate2dCommand(m, CANVAS_CENTER.x, CANVAS_CENTER.y);
 
     return {
-      transform: [{perspective: 1000}, {matrix: m}],
+      transform: [{perspective: 1000}, {matrix: result}],
     };
   });
 
@@ -303,17 +307,17 @@ export default () => {
   return (
     <View style={styles.container}>
       <CustomSquare
-        style={{position: 'absolute', backgroundColor: '#ffa600c9'}}
-        width={100}
-        height={100}
+        style={{position: 'absolute', backgroundColor: '#ffa60037'}}
+        width={150}
+        height={150}
         rotateX={rotate}
       />
-      {/* <RightSquare
-        style={{position: 'absolute', backgroundColor: '#8014149a'}}
-        width={100}
-        height={100}
+      <RightSquare
+        style={{position: 'absolute', backgroundColor: '#80141462'}}
+        width={150}
+        height={150}
         rotateX={rotate}
-      /> */}
+      />
     </View>
   );
 };
