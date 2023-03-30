@@ -12,11 +12,11 @@ import {multiply2D} from './matrix';
 
 import MatrixMath from 'react-native/Libraries/Utilities/MatrixMath';
 
-const {width, height} = Dimensions.get('window');
+const {width: SCREEN_WIDTH, height: SCREEN_HEIGHT} = Dimensions.get('window');
 
 const CANVAS_CENTER = {
-  x: width / 2,
-  y: height / 2,
+  x: SCREEN_WIDTH / 2,
+  y: SCREEN_HEIGHT / 2,
 };
 
 type PointProps = {
@@ -34,29 +34,6 @@ const pointDimensionStyle: ViewStyle = {
   height: SIZE,
   borderRadius: SIZE / 2,
 };
-
-const points: Array<PointProps> = [
-  {
-    x: CANVAS_CENTER.x - 50 - pointDimensionStyle.borderRadius!,
-    y: CANVAS_CENTER.y - 50 - pointDimensionStyle.borderRadius!,
-    z: 0,
-  },
-  // {
-  //   x: CANVAS_CENTER.x + 50 - pointDimensionStyle.borderRadius!,
-  //   y: CANVAS_CENTER.y - 50 - pointDimensionStyle.borderRadius!,
-  //   z: 0,
-  // },
-  // {
-  //   x: CANVAS_CENTER.x - 50 - pointDimensionStyle.borderRadius!,
-  //   y: CANVAS_CENTER.y + 50 - pointDimensionStyle.borderRadius!,
-  //   z: 0,
-  // },
-  // {
-  //   x: CANVAS_CENTER.x + 50 - pointDimensionStyle.borderRadius!,
-  //   y: CANVAS_CENTER.y + 50 - pointDimensionStyle.borderRadius!,
-  //   z: 0,
-  // },
-];
 
 const projectionMatrix: Array<Array<number>> = [
   [1, 0, 0],
@@ -94,11 +71,21 @@ const rotationZMatrix: Array<Array<number>> = [
   [0, 0, 1],
 ];
 
-const PointComponent = ({...rest}: ViewProps) => <Animated.View {...rest} />;
-
 const createIdentityMatrix = () => {
   'worklet';
   return [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+};
+
+const reuseTranslate3dCommand = (
+  matrixCommand: Array<number>,
+  x: number,
+  y: number,
+  z: number,
+) => {
+  'worklet';
+  matrixCommand[12] = x;
+  matrixCommand[13] = y;
+  matrixCommand[14] = z;
 };
 
 const reuseTranslate2dCommand = (
@@ -143,23 +130,144 @@ const reuseRotateZCommand = (matrixCommand: Array<number>, radians: number) => {
   matrixCommand[5] = Math.cos(radians);
 };
 
-export default () => {
-  const rotate = useSharedValue(0);
-  // const matrix = useSharedValue<number[]>(createIdentityMatrix());
+const createOrthographic = (
+  left: number,
+  right: number,
+  bottom: number,
+  top: number,
+  near: number,
+  far: number,
+) => {
+  'worklet';
+  const a = 2 / (right - left);
+  const b = 2 / (top - bottom);
+  const c = -2 / (far - near);
 
-  useEffect(() => {
-    rotate.value = withRepeat(
-      withTiming(Math.PI, {duration: 5000, easing: Easing.ease}),
-      -1,
-      true,
-    );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const tx = -(right + left) / (right - left);
+  const ty = -(top + bottom) / (top - bottom);
+  const tz = -(far + near) / (far - near);
 
-  const style = useAnimatedStyle(() => {
+  return [a, 0, 0, 0, 0, b, 0, 0, 0, 0, c, 0, tx, ty, tz, 1];
+};
+
+const multiplyInto = (
+  out: Array<number>,
+  a: Array<number>,
+  b: Array<number>,
+) => {
+  'worklet';
+  const a00 = a[0],
+    a01 = a[1],
+    a02 = a[2],
+    a03 = a[3],
+    a10 = a[4],
+    a11 = a[5],
+    a12 = a[6],
+    a13 = a[7],
+    a20 = a[8],
+    a21 = a[9],
+    a22 = a[10],
+    a23 = a[11],
+    a30 = a[12],
+    a31 = a[13],
+    a32 = a[14],
+    a33 = a[15];
+
+  let b0 = b[0],
+    b1 = b[1],
+    b2 = b[2],
+    b3 = b[3];
+  out[0] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
+  out[1] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
+  out[2] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
+  out[3] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
+
+  b0 = b[4];
+  b1 = b[5];
+  b2 = b[6];
+  b3 = b[7];
+  out[4] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
+  out[5] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
+  out[6] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
+  out[7] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
+
+  b0 = b[8];
+  b1 = b[9];
+  b2 = b[10];
+  b3 = b[11];
+  out[8] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
+  out[9] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
+  out[10] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
+  out[11] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
+
+  b0 = b[12];
+  b1 = b[13];
+  b2 = b[14];
+  b3 = b[15];
+  out[12] = b0 * a00 + b1 * a10 + b2 * a20 + b3 * a30;
+  out[13] = b0 * a01 + b1 * a11 + b2 * a21 + b3 * a31;
+  out[14] = b0 * a02 + b1 * a12 + b2 * a22 + b3 * a32;
+  out[15] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
+};
+
+type SquareProps = ViewStyle;
+
+const Square = ({...style}: ViewStyle) => {
+  return <Animated.View style={[style]} />;
+};
+
+type CustomSquareProps = {
+  style: Exclude<ViewStyle, 'width' | 'height'>;
+  width: number;
+  height: number;
+  rotateX: Animated.SharedValue<number>;
+};
+
+const CustomSquare = ({rotateX, style, width, height}: CustomSquareProps) => {
+  const animatedStyle = useAnimatedStyle(() => {
     const m = createIdentityMatrix();
 
-    reuseRotateXCommand(m, rotate.value);
+    const x = CANVAS_CENTER.x - width / 2;
+    const y = CANVAS_CENTER.y - height / 2;
+
+    reuseTranslate2dCommand(m, x, y);
+    console.log(createOrthographic(x, x + 100, y - 100, 0, 0, 100));
+
+    // reuseRotateXCommand(m, rotateX.value);
+    // reuseRotateYCommand(m, rotate.value);
+    // reuseRotateZCommand(m, rotate.value);
+
+    // matrix.value = m;
+    // reuseTranslate2dCommand(m, CANVAS_CENTER.x, CANVAS_CENTER.y);
+
+    return {
+      transform: [{perspective: 1000}, {matrix: m}],
+    };
+  });
+
+  return <Animated.View style={[style, {width, height}, animatedStyle]} />;
+};
+
+const RightSquare = ({rotateX, style, width, height}: CustomSquareProps) => {
+  const animatedStyle = useAnimatedStyle(() => {
+    const m = createIdentityMatrix();
+
+    // reuseTranslate2dCommand(m, CANVAS_CENTER.x, CANVAS_CENTER.y - height / 2);
+    reuseTranslate3dCommand(
+      m,
+      0,
+      CANVAS_CENTER.y - height / 2,
+      CANVAS_CENTER.x,
+    );
+    reuseRotateYCommand(m, Math.PI);
+
+    // reuseTranslate2dCommand(
+    //   m,
+    //   CANVAS_CENTER.x - width / 2,
+    //   CANVAS_CENTER.y - height / 2,
+    // );
+
+    reuseRotateXCommand(m, rotateX.value);
     // reuseRotateYCommand(m, rotate.value);
     // reuseRotateZCommand(m, rotate.value);
 
@@ -168,29 +276,44 @@ export default () => {
     // reuseTranslate2dCommand(m, CANVAS_CENTER.x, CANVAS_CENTER.y);
 
     return {
-      transform: [{matrix: m}],
+      transform: [{perspective: 1000}, {matrix: m}],
     };
   });
 
   return (
+    <Animated.View style={[style, {width, height}, animatedStyle]}>
+      <View style={[{width: 5, height: 5, backgroundColor: 'black'}]} />
+    </Animated.View>
+  );
+};
+
+export default () => {
+  const rotate = useSharedValue(0);
+  // const matrix = useSharedValue<number[]>(createIdentityMatrix());
+
+  // useEffect(() => {
+  //   rotate.value = withRepeat(
+  //     withTiming(Math.PI, {duration: 5000, easing: Easing.ease}),
+  //     -1,
+  //     true,
+  //   );
+  //   // eslint-disable-next-line react-hooks/exhaustive-deps
+  // }, []);
+
+  return (
     <View style={styles.container}>
-      {points.map((p, i) => {
-        return (
-          <PointComponent
-            key={i.toString()}
-            style={[
-              {
-                ...pointDimensionStyle,
-                position: 'absolute',
-                backgroundColor: '#f4b5b5',
-                left: p.x,
-                top: p.y,
-              },
-              style,
-            ]}
-          />
-        );
-      })}
+      <CustomSquare
+        style={{position: 'absolute', backgroundColor: '#ffa600c9'}}
+        width={100}
+        height={100}
+        rotateX={rotate}
+      />
+      {/* <RightSquare
+        style={{position: 'absolute', backgroundColor: '#8014149a'}}
+        width={100}
+        height={100}
+        rotateX={rotate}
+      /> */}
     </View>
   );
 };
