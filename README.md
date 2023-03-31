@@ -1,5 +1,5 @@
 <h4 align="center">
-  Pinch to zoom with <a href="https://github.com/software-mansion/react-native-reanimated">React Native Reanimated</a> and <a href="https://docs.swmansion.com/react-native-gesture-handler/docs/getting-started.html">React Native Gesture Handler</a>
+  3D perspective with <a href="https://docs.swmansion.com/react-native-reanimated/">React Native Reanimated</a>
 </h4>
 
 <p align="center">
@@ -13,7 +13,7 @@ https://user-images.githubusercontent.com/18239349/229210602-1105b172-01ed-4640-
 
 ```bash
 # Clone this repository
-$ git clone https://github.com/renatobentorocha/PinchToZoom.git ReactNativePerspective
+$ git clone https://github.com/renatobentorocha/react-native-perspective.git ReactNativePerspective
 
 # Go into the repository
 $ cd ReactNativePerspective
