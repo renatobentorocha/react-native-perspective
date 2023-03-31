@@ -210,10 +210,41 @@ const multiplyInto = (
   out[15] = b0 * a03 + b1 * a13 + b2 * a23 + b3 * a33;
 };
 
-type SquareProps = ViewStyle;
+const transformWithOrigin = (
+  transformMatrix: Array<number>,
+  origin: {x: number; y: number; z: number},
+) => {
+  'worklet';
+  const {x, y, z} = origin;
+  const translateToOrigin = createIdentityMatrix();
+  reuseTranslate3dCommand(translateToOrigin, -x, -y, -z);
+  multiplyInto(transformMatrix, translateToOrigin, transformMatrix);
+  const translateBack = createIdentityMatrix();
+  reuseTranslate3dCommand(translateBack, x, y, z);
+  multiplyInto(transformMatrix, transformMatrix, translateBack);
+};
 
-const Square = ({...style}: ViewStyle) => {
-  return <Animated.View style={[style]} />;
+const rotateXYZ = (amountX: number, amountY: number, amountZ: number) => {
+  'worklet';
+
+  let rotX = createIdentityMatrix();
+  reuseRotateXCommand(rotX, amountX);
+
+  let rotY = createIdentityMatrix();
+  reuseRotateYCommand(rotY, amountY);
+
+  let rotZ = createIdentityMatrix();
+  reuseRotateZCommand(rotZ, amountZ);
+
+  // rotXYZ = Z * Y * X
+  // matrices are multiplied from right to left
+  let result = createIdentityMatrix();
+  // result = Y * X
+  multiplyInto(result, rotX, rotY);
+  // result = Z * (Y * X)
+  multiplyInto(result, result, rotZ);
+
+  return result;
 };
 
 type CustomSquareProps = {
@@ -223,28 +254,47 @@ type CustomSquareProps = {
   rotateX: Animated.SharedValue<number>;
 };
 
-const CustomSquare = ({rotateX, style, width, height}: CustomSquareProps) => {
+const BackSquare = ({rotateX, style, width, height}: CustomSquareProps) => {
   const animatedStyle = useAnimatedStyle(() => {
     const m = createIdentityMatrix();
 
-    const x = CANVAS_CENTER.x - 150;
+    const x = CANVAS_CENTER.x - width / 2;
     const y = CANVAS_CENTER.y - height / 2;
 
-    const orthographic = createOrthographic(x, x + 1.2, x, x + 1.2, 1, 2);
+    const result = Array.from(m);
 
-    const result = Array.from({length: m.length}, () => 0);
+    reuseTranslate3dCommand(result, x, y, -width);
+    reuseRotateYCommand(result, Math.PI / 4);
 
-    multiplyInto(result, orthographic, m);
+    const rotate = rotateXYZ(rotateX.value, rotateX.value, rotateX.value);
 
-    // reuseTranslate2dCommand(result, x, y);
-    // reuseRotateYCommand(result, Math.PI / 3);
+    transformWithOrigin(rotate, {x: -width / 2, y: -width / 2, z: 150});
+    multiplyInto(result, result, rotate);
 
-    // reuseRotateXCommand(m, rotateX.value);
+    return {
+      transform: [{perspective: 1000}, {matrix: result}],
+    };
+  });
+
+  return <Animated.View style={[style, {width, height}, animatedStyle]} />;
+};
+
+const FrontSquare = ({rotateX, style, width, height}: CustomSquareProps) => {
+  const animatedStyle = useAnimatedStyle(() => {
+    const m = createIdentityMatrix();
+
+    const x = CANVAS_CENTER.x - width / 2;
+    const y = CANVAS_CENTER.y - height / 2;
+
+    const result = Array.from(m);
+
     reuseTranslate2dCommand(result, x, y);
     reuseRotateYCommand(result, Math.PI / 4);
-    // reuseRotateZCommand(m, rotate.value);
 
-    // matrix.value = m;
+    const rotate = rotateXYZ(-rotateX.value, -rotateX.value, -rotateX.value);
+
+    transformWithOrigin(rotate, {x: -width / 2, y: -width / 2, z: 150});
+    multiplyInto(result, result, rotate);
 
     return {
       transform: [{perspective: 1000}, {matrix: result}],
@@ -258,62 +308,153 @@ const RightSquare = ({rotateX, style, width, height}: CustomSquareProps) => {
   const animatedStyle = useAnimatedStyle(() => {
     const m = createIdentityMatrix();
 
-    const x = CANVAS_CENTER.x;
+    const x = CANVAS_CENTER.x - 25;
     const y = CANVAS_CENTER.y - height / 2;
 
-    const orthographic = createOrthographic(x, x + 1.1, x, x + 1.1, 1, 2);
+    const result = Array.from(m);
 
-    const result = Array.from({length: m.length}, () => 0);
+    reuseTranslate3dCommand(result, x, y, -100);
+    reuseRotateYCommand(result, (2 * Math.PI) / 4);
 
-    multiplyInto(result, orthographic, m);
+    const rotate = rotateXYZ(-rotateX.value, rotateX.value, -rotateX.value);
 
-    reuseTranslate2dCommand(result, x, y);
-    reuseRotateYCommand(result, Math.PI / 4);
-
-    // reuseRotateYCommand(result, Math.PI / 3);
-
-    // reuseRotateXCommand(m, rotateX.value);
-    // reuseRotateYCommand(m, rotate.value);
-    // reuseRotateZCommand(m, rotate.value);
-
-    // matrix.value = m;
-    // reuseTranslate2dCommand(m, CANVAS_CENTER.x, CANVAS_CENTER.y);
+    transformWithOrigin(rotate, {x: -width / 2, y: -width / 2, z: 150});
+    multiplyInto(result, result, rotate);
 
     return {
       transform: [{perspective: 1000}, {matrix: result}],
     };
   });
 
-  return (
-    <Animated.View style={[style, {width, height}, animatedStyle]}>
-      <View style={[{width: 5, height: 5, backgroundColor: 'black'}]} />
-    </Animated.View>
-  );
+  return <Animated.View style={[style, {width, height}, animatedStyle]} />;
+};
+
+const LeftSquare = ({rotateX, style, width, height}: CustomSquareProps) => {
+  const animatedStyle = useAnimatedStyle(() => {
+    const m = createIdentityMatrix();
+
+    const x = CANVAS_CENTER.x - width + 20;
+    const y = CANVAS_CENTER.y - height / 2;
+
+    const result = Array.from(m);
+
+    reuseTranslate3dCommand(result, x, y, -10);
+    reuseRotateYCommand(result, (2 * Math.PI) / 4);
+
+    const rotate = rotateXYZ(rotateX.value, rotateX.value, rotateX.value);
+
+    transformWithOrigin(rotate, {x: -width / 2, y: -width / 2, z: 150});
+    multiplyInto(result, result, rotate);
+
+    return {
+      transform: [{perspective: 1000}, {matrix: result}],
+    };
+  });
+
+  return <Animated.View style={[style, {width, height}, animatedStyle]} />;
+};
+
+const BottomSquare = ({rotateX, style, width, height}: CustomSquareProps) => {
+  const animatedStyle = useAnimatedStyle(() => {
+    const m = createIdentityMatrix();
+
+    const x = CANVAS_CENTER.x - width / 2;
+    const y = CANVAS_CENTER.y;
+
+    const result = Array.from(m);
+
+    reuseTranslate3dCommand(result, x, y, -width / 2);
+
+    reuseRotateXCommand(result, Math.PI / 2);
+    reuseRotateYCommand(result, Math.PI / 4);
+
+    const rotate = rotateXYZ(-rotateX.value, -rotateX.value, -rotateX.value);
+
+    transformWithOrigin(rotate, {x: -width / 2, y: -width / 2, z: 150});
+    multiplyInto(result, result, rotate);
+
+    return {
+      transform: [{perspective: 1000}, {matrix: result}],
+    };
+  });
+
+  return <Animated.View style={[style, {width, height}, animatedStyle]} />;
+};
+
+const TopSquare = ({rotateX, style, width, height}: CustomSquareProps) => {
+  const animatedStyle = useAnimatedStyle(() => {
+    const m = createIdentityMatrix();
+
+    const x = CANVAS_CENTER.x - width / 2;
+    const y = CANVAS_CENTER.y - height;
+
+    const result = Array.from(m);
+
+    reuseTranslate3dCommand(result, x, y, -width / 2);
+
+    reuseRotateXCommand(result, Math.PI / 2);
+    reuseRotateYCommand(result, Math.PI / 4);
+
+    const rotate = rotateXYZ(rotateX.value, rotateX.value, rotateX.value);
+
+    transformWithOrigin(rotate, {x: -width / 2, y: -width / 2, z: 150});
+    multiplyInto(result, result, rotate);
+
+    return {
+      transform: [{perspective: 1000}, {matrix: result}],
+    };
+  });
+
+  return <Animated.View style={[style, {width, height}, animatedStyle]} />;
 };
 
 export default () => {
   const rotate = useSharedValue(0);
   // const matrix = useSharedValue<number[]>(createIdentityMatrix());
 
-  // useEffect(() => {
-  //   rotate.value = withRepeat(
-  //     withTiming(Math.PI, {duration: 5000, easing: Easing.ease}),
-  //     -1,
-  //     true,
-  //   );
-  //   // eslint-disable-next-line react-hooks/exhaustive-deps
-  // }, []);
+  useEffect(() => {
+    rotate.value = withRepeat(
+      withTiming(Math.PI * 2, {duration: 6000, easing: Easing.sin}),
+      -1,
+      true,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <View style={styles.container}>
-      <CustomSquare
+      <BackSquare
         style={{position: 'absolute', backgroundColor: '#ffa60037'}}
         width={150}
         height={150}
         rotateX={rotate}
       />
-      <RightSquare
+      <FrontSquare
         style={{position: 'absolute', backgroundColor: '#80141462'}}
+        width={150}
+        height={150}
+        rotateX={rotate}
+      />
+      <RightSquare
+        style={{position: 'absolute', backgroundColor: '#360c6261'}}
+        width={150}
+        height={150}
+        rotateX={rotate}
+      />
+      <LeftSquare
+        style={{position: 'absolute', backgroundColor: '#e307075f'}}
+        width={150}
+        height={150}
+        rotateX={rotate}
+      />
+      <BottomSquare
+        style={{position: 'absolute', backgroundColor: '#4e801457'}}
+        width={150}
+        height={150}
+        rotateX={rotate}
+      />
+      <TopSquare
+        style={{position: 'absolute', backgroundColor: '#4e801457'}}
         width={150}
         height={150}
         rotateX={rotate}
