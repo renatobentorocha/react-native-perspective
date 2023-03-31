@@ -1,75 +1,16 @@
 import React, {useEffect} from 'react';
-import {Dimensions, StyleSheet, View, ViewProps, ViewStyle} from 'react-native';
+import {StyleSheet, View} from 'react-native';
 
 import Animated, {
   Easing,
+  cancelAnimation,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
   withTiming,
+  SlideInUp,
+  withDelay,
 } from 'react-native-reanimated';
-import {multiply2D} from './matrix';
-
-import MatrixMath from 'react-native/Libraries/Utilities/MatrixMath';
-
-const {width: SCREEN_WIDTH, height: SCREEN_HEIGHT} = Dimensions.get('window');
-
-const CANVAS_CENTER = {
-  x: SCREEN_WIDTH / 2,
-  y: SCREEN_HEIGHT / 2,
-};
-
-type PointProps = {
-  x: number;
-  y: number;
-  z: number;
-};
-
-const theta = 30;
-
-const SIZE = 30;
-
-const pointDimensionStyle: ViewStyle = {
-  width: SIZE,
-  height: SIZE,
-  borderRadius: SIZE / 2,
-};
-
-const projectionMatrix: Array<Array<number>> = [
-  [1, 0, 0],
-  [0, 1, 0],
-  [0, 0, 0],
-];
-
-const translateBackMatrix: Array<Array<number>> = [
-  [1, 0, -CANVAS_CENTER.x],
-  [0, 1, -CANVAS_CENTER.y],
-  [0, 0, 0],
-];
-
-const translateForwardMatrix: Array<Array<number>> = [
-  [1, 0, CANVAS_CENTER.x],
-  [0, 1, CANVAS_CENTER.y],
-  [0, 0, 0],
-];
-
-const rotationXMatrix: Array<Array<number>> = [
-  [1, 0, 0],
-  [0, Math.cos(theta), -Math.sin(theta)],
-  [0, Math.sin(theta), Math.cos(theta)],
-];
-
-const rotationYMatrix: Array<Array<number>> = [
-  [Math.cos(theta), 0, Math.sin(theta)],
-  [0, 1, 0],
-  [-Math.sin(theta), 0, Math.cos(theta)],
-];
-
-const rotationZMatrix: Array<Array<number>> = [
-  [Math.cos(theta), -Math.sin(theta), 0],
-  [Math.sin(theta), Math.cos(theta), 0],
-  [0, 0, 1],
-];
 
 const createIdentityMatrix = () => {
   'worklet';
@@ -86,23 +27,6 @@ const reuseTranslate3dCommand = (
   matrixCommand[12] = x;
   matrixCommand[13] = y;
   matrixCommand[14] = z;
-};
-
-const reuseTranslate2dCommand = (
-  matrixCommand: Array<number>,
-  x: number,
-  y: number,
-) => {
-  'worklet';
-  matrixCommand[12] = x;
-  matrixCommand[13] = y;
-};
-
-const createTranslate2d = (x: number, y: number) => {
-  'worklet';
-  const mat = createIdentityMatrix();
-  reuseTranslate2dCommand(mat, x, y);
-  return mat;
 };
 
 const reuseRotateXCommand = (matrixCommand: Array<number>, radians: number) => {
@@ -128,26 +52,6 @@ const reuseRotateZCommand = (matrixCommand: Array<number>, radians: number) => {
   matrixCommand[1] = Math.sin(radians);
   matrixCommand[4] = -Math.sin(radians);
   matrixCommand[5] = Math.cos(radians);
-};
-
-const createOrthographic = (
-  left: number,
-  right: number,
-  bottom: number,
-  top: number,
-  near: number,
-  far: number,
-) => {
-  'worklet';
-  const a = 2 / (right - left);
-  const b = 2 / (top - bottom);
-  const c = -2 / (far - near);
-
-  const tx = -(right + left) / (right - left);
-  const ty = -(top + bottom) / (top - bottom);
-  const tz = -(far + near) / (far - near);
-
-  return [a, 0, 0, 0, 0, b, 0, 0, 0, 0, c, 0, tx, ty, tz, 1];
 };
 
 const multiplyInto = (
@@ -247,217 +151,136 @@ const rotateXYZ = (amountX: number, amountY: number, amountZ: number) => {
   return result;
 };
 
-type CustomSquareProps = {
-  style: Exclude<ViewStyle, 'width' | 'height'>;
-  width: number;
-  height: number;
-  rotateX: Animated.SharedValue<number>;
+const origin = {
+  x: 0,
+  y: 0,
+  z: 50,
 };
 
-const BackSquare = ({rotateX, style, width, height}: CustomSquareProps) => {
-  const animatedStyle = useAnimatedStyle(() => {
-    const m = createIdentityMatrix();
-
-    const x = CANVAS_CENTER.x - width / 2;
-    const y = CANVAS_CENTER.y - height / 2;
-
-    const result = Array.from(m);
-
-    reuseTranslate3dCommand(result, x, y, -width);
-    reuseRotateYCommand(result, Math.PI / 4);
-
-    const rotate = rotateXYZ(rotateX.value, rotateX.value, rotateX.value);
-
-    transformWithOrigin(rotate, {x: -width / 2, y: -width / 2, z: 150});
-    multiplyInto(result, result, rotate);
-
-    return {
-      transform: [{perspective: 1000}, {matrix: result}],
-    };
-  });
-
-  return <Animated.View style={[style, {width, height}, animatedStyle]} />;
-};
-
-const FrontSquare = ({rotateX, style, width, height}: CustomSquareProps) => {
-  const animatedStyle = useAnimatedStyle(() => {
-    const m = createIdentityMatrix();
-
-    const x = CANVAS_CENTER.x - width / 2;
-    const y = CANVAS_CENTER.y - height / 2;
-
-    const result = Array.from(m);
-
-    reuseTranslate2dCommand(result, x, y);
-    reuseRotateYCommand(result, Math.PI / 4);
-
-    const rotate = rotateXYZ(-rotateX.value, -rotateX.value, -rotateX.value);
-
-    transformWithOrigin(rotate, {x: -width / 2, y: -width / 2, z: 150});
-    multiplyInto(result, result, rotate);
-
-    return {
-      transform: [{perspective: 1000}, {matrix: result}],
-    };
-  });
-
-  return <Animated.View style={[style, {width, height}, animatedStyle]} />;
-};
-
-const RightSquare = ({rotateX, style, width, height}: CustomSquareProps) => {
-  const animatedStyle = useAnimatedStyle(() => {
-    const m = createIdentityMatrix();
-
-    const x = CANVAS_CENTER.x - 25;
-    const y = CANVAS_CENTER.y - height / 2;
-
-    const result = Array.from(m);
-
-    reuseTranslate3dCommand(result, x, y, -100);
-    reuseRotateYCommand(result, (2 * Math.PI) / 4);
-
-    const rotate = rotateXYZ(-rotateX.value, rotateX.value, -rotateX.value);
-
-    transformWithOrigin(rotate, {x: -width / 2, y: -width / 2, z: 150});
-    multiplyInto(result, result, rotate);
-
-    return {
-      transform: [{perspective: 1000}, {matrix: result}],
-    };
-  });
-
-  return <Animated.View style={[style, {width, height}, animatedStyle]} />;
-};
-
-const LeftSquare = ({rotateX, style, width, height}: CustomSquareProps) => {
-  const animatedStyle = useAnimatedStyle(() => {
-    const m = createIdentityMatrix();
-
-    const x = CANVAS_CENTER.x - width + 20;
-    const y = CANVAS_CENTER.y - height / 2;
-
-    const result = Array.from(m);
-
-    reuseTranslate3dCommand(result, x, y, -10);
-    reuseRotateYCommand(result, (2 * Math.PI) / 4);
-
-    const rotate = rotateXYZ(rotateX.value, rotateX.value, rotateX.value);
-
-    transformWithOrigin(rotate, {x: -width / 2, y: -width / 2, z: 150});
-    multiplyInto(result, result, rotate);
-
-    return {
-      transform: [{perspective: 1000}, {matrix: result}],
-    };
-  });
-
-  return <Animated.View style={[style, {width, height}, animatedStyle]} />;
-};
-
-const BottomSquare = ({rotateX, style, width, height}: CustomSquareProps) => {
-  const animatedStyle = useAnimatedStyle(() => {
-    const m = createIdentityMatrix();
-
-    const x = CANVAS_CENTER.x - width / 2;
-    const y = CANVAS_CENTER.y;
-
-    const result = Array.from(m);
-
-    reuseTranslate3dCommand(result, x, y, -width / 2);
-
-    reuseRotateXCommand(result, Math.PI / 2);
-    reuseRotateYCommand(result, Math.PI / 4);
-
-    const rotate = rotateXYZ(-rotateX.value, -rotateX.value, -rotateX.value);
-
-    transformWithOrigin(rotate, {x: -width / 2, y: -width / 2, z: 150});
-    multiplyInto(result, result, rotate);
-
-    return {
-      transform: [{perspective: 1000}, {matrix: result}],
-    };
-  });
-
-  return <Animated.View style={[style, {width, height}, animatedStyle]} />;
-};
-
-const TopSquare = ({rotateX, style, width, height}: CustomSquareProps) => {
-  const animatedStyle = useAnimatedStyle(() => {
-    const m = createIdentityMatrix();
-
-    const x = CANVAS_CENTER.x - width / 2;
-    const y = CANVAS_CENTER.y - height;
-
-    const result = Array.from(m);
-
-    reuseTranslate3dCommand(result, x, y, -width / 2);
-
-    reuseRotateXCommand(result, Math.PI / 2);
-    reuseRotateYCommand(result, Math.PI / 4);
-
-    const rotate = rotateXYZ(rotateX.value, rotateX.value, rotateX.value);
-
-    transformWithOrigin(rotate, {x: -width / 2, y: -width / 2, z: 150});
-    multiplyInto(result, result, rotate);
-
-    return {
-      transform: [{perspective: 1000}, {matrix: result}],
-    };
-  });
-
-  return <Animated.View style={[style, {width, height}, animatedStyle]} />;
-};
+const IndianRed = '#cd5c5c50';
+const DarkOrange = '#FF8C0050';
+const Gold = '#FFD70050';
+const MediumPurple = '#9370DB50';
+const SteelBlue = '#4682B450';
+const Chocolate = '#D2691E50';
 
 export default () => {
-  const rotate = useSharedValue(0);
-  // const matrix = useSharedValue<number[]>(createIdentityMatrix());
+  const x = useSharedValue(0);
+  const y = useSharedValue(0);
 
   useEffect(() => {
-    rotate.value = withRepeat(
-      withTiming(Math.PI * 2, {duration: 6000, easing: Easing.sin}),
-      -1,
-      true,
+    y.value = 0;
+    y.value = withDelay(
+      6500,
+      withRepeat(
+        withTiming(Math.PI * 2, {duration: 8000, easing: Easing.linear}),
+        -1,
+        false,
+      ),
     );
+
+    x.value = 0;
+    x.value = withDelay(
+      6500,
+      withRepeat(
+        withTiming(Math.PI * 2, {duration: 8000, easing: Easing.linear}),
+        -1,
+        false,
+      ),
+    );
+
+    return () => {
+      cancelAnimation(x);
+      cancelAnimation(y);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const animatedStyleFront = useAnimatedStyle(() => {
+    const rotationMatrix = rotateXYZ(y.value, x.value, 0);
+    transformWithOrigin(rotationMatrix, origin);
+    return {
+      transform: [{perspective: 1000}, {matrix: rotationMatrix}],
+    };
+  });
+
+  const animatedStyleLeft = useAnimatedStyle(() => {
+    const rotationMatrix = rotateXYZ(y.value, x.value - Math.PI / 2, 0);
+    transformWithOrigin(rotationMatrix, origin);
+    return {
+      transform: [{perspective: 1000}, {matrix: rotationMatrix}],
+    };
+  });
+
+  const animatedStyleRight = useAnimatedStyle(() => {
+    const rotationMatrix = rotateXYZ(y.value, x.value + Math.PI / 2, 0);
+    transformWithOrigin(rotationMatrix, origin);
+    return {
+      transform: [{perspective: 1000}, {matrix: rotationMatrix}],
+    };
+  });
+
+  const animatedStyleBack = useAnimatedStyle(() => {
+    const rotationMatrix = rotateXYZ(y.value, x.value + Math.PI, 0);
+    transformWithOrigin(rotationMatrix, origin);
+    return {
+      transform: [{perspective: 1000}, {matrix: rotationMatrix}],
+    };
+  });
+
+  const animatedStyleBottom = useAnimatedStyle(() => {
+    const rotationMatrix = rotateXYZ(y.value - Math.PI / 2, 0, x.value);
+    transformWithOrigin(rotationMatrix, origin);
+    return {
+      transform: [{perspective: 1000}, {matrix: rotationMatrix}],
+    };
+  });
+
+  const animatedStyleTop = useAnimatedStyle(() => {
+    const rotationMatrix = rotateXYZ(y.value + Math.PI / 2, 0, -x.value);
+    transformWithOrigin(rotationMatrix, origin);
+    return {
+      transform: [{perspective: 1000}, {matrix: rotationMatrix}],
+    };
+  });
+
   return (
     <View style={styles.container}>
-      <BackSquare
-        style={{position: 'absolute', backgroundColor: '#ffa60037'}}
-        width={150}
-        height={150}
-        rotateX={rotate}
+      <Animated.View
+        entering={SlideInUp.duration(1000)}
+        style={[styles.square, {backgroundColor: Gold}, animatedStyleBack]}
       />
-      <FrontSquare
-        style={{position: 'absolute', backgroundColor: '#80141462'}}
-        width={150}
-        height={150}
-        rotateX={rotate}
+      <Animated.View
+        entering={SlideInUp.duration(2000)}
+        style={[styles.square, {backgroundColor: SteelBlue}, animatedStyleLeft]}
       />
-      <RightSquare
-        style={{position: 'absolute', backgroundColor: '#360c6261'}}
-        width={150}
-        height={150}
-        rotateX={rotate}
+      <Animated.View
+        entering={SlideInUp.duration(3000)}
+        style={[
+          styles.square,
+          {backgroundColor: MediumPurple},
+          animatedStyleRight,
+        ]}
       />
-      <LeftSquare
-        style={{position: 'absolute', backgroundColor: '#e307075f'}}
-        width={150}
-        height={150}
-        rotateX={rotate}
+      <Animated.View
+        entering={SlideInUp.duration(4000)}
+        style={[
+          styles.square,
+          {backgroundColor: DarkOrange},
+          animatedStyleBottom,
+        ]}
       />
-      <BottomSquare
-        style={{position: 'absolute', backgroundColor: '#4e801457'}}
-        width={150}
-        height={150}
-        rotateX={rotate}
+      <Animated.View
+        entering={SlideInUp.duration(5000)}
+        style={[styles.square, {backgroundColor: IndianRed}, animatedStyleTop]}
       />
-      <TopSquare
-        style={{position: 'absolute', backgroundColor: '#4e801457'}}
-        width={150}
-        height={150}
-        rotateX={rotate}
+      <Animated.View
+        entering={SlideInUp.duration(6000)}
+        style={[
+          styles.square,
+          {backgroundColor: Chocolate},
+          animatedStyleFront,
+        ]}
       />
     </View>
   );
@@ -467,14 +290,12 @@ const styles = StyleSheet.create({
   container: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: '#1a1818',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  circle: {
+  square: {
     position: 'absolute',
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#ae6161',
-    left: CANVAS_CENTER.x - 40,
-    top: CANVAS_CENTER.y - 40,
+    height: 100,
+    width: 100,
   },
 });
